@@ -1,1 +1,1 @@
-# mxbai-embedding
+# Repository for Bachelorarbeit at Haufe
