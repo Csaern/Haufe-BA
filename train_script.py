@@ -6,18 +6,12 @@ from sentence_transformers import (
 from sentence_transformers.losses import MultipleNegativesRankingLoss
 from sentence_transformers.training_args import BatchSamplers
 from sentence_transformers.evaluation import TripletEvaluator
-from torch.utils.data import DataLoader
-from datasets import load_from_disk, Dataset
+from datasets import load_from_disk
 import matplotlib.pyplot as plt
-from transformers import EarlyStoppingCallback, get_cosine_with_hard_restarts_schedule_with_warmup
+from transformers import EarlyStoppingCallback
 import json
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-import torch
 from torch.optim import AdamW
-from sentence_transformers import InputExample
-from transformers import TrainerCallback
-from datasets import load_dataset
-from sentence_transformers.sampler import NoDuplicatesBatchSampler
 
 model = SentenceTransformer("mixedbread-ai/deepset-mxbai-embed-de-large-v1", device="cuda")
 
@@ -29,8 +23,10 @@ eval_dataset = load_from_disk("Data/dev_dataset")
 test_dataset = load_from_disk("Data/test_dataset")
 
 filtered_dataset = train_dataset.remove_columns([col for col in train_dataset.column_names if col not in ['anchor', 'positive', 'hard_negative_1', 'hard_negative_2']])
-#print(f"Length of train dataset {len(train_dataset['train'])}")
+
 train_dataset = filtered_dataset
+
+#print(f"Length of train dataset {len(train_dataset['train'])}")
 
 model_path = "Training/finetuning_v1"
 
@@ -46,7 +42,7 @@ print(f"Testdatensatz: {test_dataset}")
 
 loss = MultipleNegativesRankingLoss(model)
 
-# For Cosine-Accuracy before training
+# Cosine-Accuracy before training
 dev_evaluator = TripletEvaluator(
     anchors=eval_dataset["anchor"],
     positives=eval_dataset["positive"],
@@ -106,28 +102,22 @@ trainer = SentenceTransformerTrainer(
     #callbacks=[EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.05),TrainerCallback()],
 )
 
-#dev_result = dev_evaluator(model)
-#dev_score = dev_result['mxbai-dev_cosine_accuracy']
-dev_score=0.5100276470184326
-#print(f"Dev Accuracy: {dev_score}")
-
 print("Start Training")
 trainer.train()
 
-# # For Cosine-Accuracy after training
+# Cosine-Accuracy after training
 test_evaluator = TripletEvaluator(
     anchors=test_dataset["anchor"],
     positives=test_dataset["positive"],
     negatives=test_dataset["hard_negative"],
     name="mxbai-test",
 )
-test_result = test_evaluator(model)
-test_score = test_result['mxbai-test_cosine_accuracy']
+#test_result = test_evaluator(model)
+#test_score = test_result['mxbai-test_cosine_accuracy']
 
 log_history = trainer.state.log_history
 log_file_path = f"{model_path}/train_logs.txt"
 
-# Logs in eine Datei schreiben
 with open(log_file_path, "w") as log_file:
     for log_entry in log_history:
         log_file.write(json.dumps(log_entry) + "\n")
@@ -138,7 +128,6 @@ train_steps, train_loss, lr_values = [], [], []
 eval_steps, eval_loss = [], []
 cosine_accuracies = []
 
-# Extrahieren der relevanten Werte aus den Logs
 for entry in log_history:
     if 'loss' in entry and 'learning_rate' in entry:
         train_steps.append(entry['step'])
@@ -151,25 +140,21 @@ for entry in log_history:
         eval_steps.append(entry['step'])
         cosine_accuracies.append(entry['eval_mxbai-dev_cosine_accuracy'])
 
-# Plot: Train Loss, Cosine Accuracy und Learning Rate
 plt.figure(figsize=(12, 6))
 
-# Achse 1: Train Loss
 ax1 = plt.gca()
 ax1.plot(train_steps, train_loss, 'b-', label='Train Loss')
 ax1.set_xlabel('Steps')
 ax1.set_ylabel('Loss', color='b')
 ax1.tick_params(axis='y', labelcolor='b')
 
-# Achse 2: Cosine Accuracy
 ax2 = ax1.twinx()
 ax2.plot(eval_steps, cosine_accuracies, 'g-', marker='o', label='Cosine Accuracy')
 ax2.set_ylabel('Cosine Accuracy', color='r')
 ax2.tick_params(axis='y', labelcolor='r')
 
-# Achse 3: Learning Rate
 ax3 = ax1.twinx()
-ax3.spines["right"].set_position(("outward", 60))  # Zweite rechte Achse etwas nach außen verschieben
+ax3.spines["right"].set_position(("outward", 60))
 ax3.plot(train_steps, lr_values, 'r--', label='Learning Rate')
 ax3.set_ylabel('Learning Rate', color='g')
 ax3.tick_params(axis='y', labelcolor='g')
